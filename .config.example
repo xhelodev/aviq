@@ -1,4 +1,4 @@
-# ai — optional configuration
+# AVIQ — optional configuration
 # Copy to ~/Scripts/.config (environment variables AI_BACKENDS, AI_MODEL and
 # AI_PROMPT take precedence over this file).
 

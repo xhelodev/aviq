@@ -1,20 +1,20 @@
-# Bash AI CLI
+# AVIQ
 
 Command-line script for quick AI answers from your terminal, powered by coding agent CLIs (opencode, Claude Code, pi or Codex). Instead of calling an API directly, it delegates to an installed agent CLI, which handles its own authentication and can inspect the directory you are in.
 
-Ask things like `ai what's in this directory` or `ai command to inspect the database`, get a short answer, and run the suggested command by pressing Enter.
+Ask things like `aviq what's in this directory` or `aviq command to inspect the database`, get a short answer, and run the suggested command by pressing Enter.
 
 ## 🚀 Installation
 
 ### Quick install (one line)
 
-Requires `~/.local/bin` in your PATH (default on most distros; re-login after running this if `ai` is not found):
+Requires `~/.local/bin` in your PATH (default on most distros; re-login after running this if `aviq` is not found):
 
 ```bash
-mkdir -p ~/.local/bin && curl -fsSL https://raw.githubusercontent.com/chelo91/bash-ai-cli/main/ai -o ~/.local/bin/ai && chmod +x ~/.local/bin/ai
+mkdir -p ~/.local/bin && curl -fsSL https://raw.githubusercontent.com/xhelodev/aviq/main/aviq -o ~/.local/bin/aviq && chmod +x ~/.local/bin/aviq
 ```
 
-To update later, run the same line again. No configuration needed — the script uses the first agent CLI it finds.
+To update later, run the same line again. No configuration needed — the script uses the first agent CLI it finds. If you installed the previous `ai` command, remove `~/.local/bin/ai` after installing AVIQ if you no longer need it.
 
 ### From the repository
 
@@ -24,8 +24,8 @@ To update later, run the same line again. No configuration needed — the script
 mkdir -p $HOME/Scripts && cd $HOME/Scripts
 
 # Download the script directly to Scripts
-git clone https://github.com/chelo91/bash-ai-cli.git ./
-chmod +x ai
+git clone https://github.com/xhelodev/aviq.git ./
+chmod +x aviq
 ```
 
 2. Make the command available globally:
@@ -63,19 +63,19 @@ The `AI_BACKENDS`, `AI_MODEL` and `AI_PROMPT` environment variables take precede
 ### 1. Direct query
 Ask a question from the command line. The agent can look at the current directory:
 ```bash
-ai what's in this directory
+aviq what's in this directory
 
-ai command to inspect the database
+aviq command to inspect the database
 
-ai how do I create a directory in Linux
+aviq how do I create a directory in Linux
 ```
 
 ### 2. Using pipe (|)
 Send file content or command output as context:
 ```bash
-cat myfile.txt | ai What does this code do
+cat myfile.txt | aviq What does this code do
 
-ls -la | ai Explain these files
+ls -la | aviq Explain these files
 ```
 
 ### 3. Running suggested commands
@@ -88,11 +88,11 @@ Commands run in a child shell, so a `cd` or `export` inside them won't persist i
 
 ### 4. Options
 ```bash
-ai -b claude "force a specific backend"
-ai -m sonnet "use a specific model for this query"
-ai -l                  # list available backends
-ai -n "ask without offering to run commands"
-ai --help
+aviq -b claude "force a specific backend"
+aviq -m sonnet "use a specific model for this query"
+aviq -l                  # list available backends
+aviq -n "ask without offering to run commands"
+aviq --help
 ```
 
 ## ⚙️ Requirements

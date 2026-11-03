@@ -1,6 +1,6 @@
 #!/bin/bash
 #
-# ai — quick AI answers from your terminal, powered by coding agent CLIs.
+# aviq — quick AI answers from your terminal, powered by coding agent CLIs.
 #
 # Instead of calling an API directly, this script delegates to an installed
 # agent CLI (opencode, claude, pi or codex), which handles its own auth and
@@ -29,11 +29,11 @@ die() { echo "Error: $*" >&2; exit 1; }
 
 usage() {
     cat <<'EOF'
-ai — quick AI answers from your terminal
+aviq — quick AI answers from your terminal
 
 Usage:
-  ai [options] [message...]          ask a question
-  command | ai [message...]          add piped output as context
+  aviq [options] [message...]          ask a question
+  command | aviq [message...]          add piped output as context
 
 Options:
   -b, --backend <name>   force a backend: opencode, claude, pi or codex
@@ -206,13 +206,17 @@ BLOCKS=$(awk '
 ' <<<"$RESPONSE")
 
 COMMANDS=()
-[[ -n "$BLOCKS" ]] && mapfile -t -d $'\034' COMMANDS < <(printf '%s' "$BLOCKS")
+if [[ -n "$BLOCKS" ]]; then
+    while IFS= read -r -d $'\034' block; do
+        COMMANDS+=("$block")
+    done < <(printf '%s\034' "$BLOCKS")
+fi
 
 # ------------------------------------------------------- offer to run them
 
 run_cmd() {
     echo "\$ $1" >&2
-    bash -c "$1"
+    bash -c "$1" </dev/tty
     local rc=$?
     [[ $rc -ne 0 ]] && echo "(exit $rc)" >&2
     exit "$rc"
