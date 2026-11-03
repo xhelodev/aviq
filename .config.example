@@ -1,4 +1,16 @@
-API_URL=""
-API_KEY=""
+# ai — optional configuration
+# Copy to ~/Scripts/.config (environment variables AI_BACKENDS, AI_MODEL and
+# AI_PROMPT take precedence over this file).
+
+# Order of preference for auto-detection: the first installed CLI is used.
+# Supported: opencode, claude, pi, codex
+BACKENDS="opencode claude pi codex"
+
+# Optional: model passed to the backend on every query. Format depends on the
+# backend (e.g. "anthropic/claude-sonnet-4-5", "sonnet", "gpt-5.2-codex").
+# Empty = backend default.
 MODEL=""
-PROMPT="Responde de manera concisa y directa, sin explicaciones adicionales pero de forma amistosa."
+
+# Instructions for the model. Sent as a system prompt to claude, prepended
+# to the message for the other backends.
+PROMPT="Responde en pocas líneas, directo y amistoso, en el idioma del usuario. Si la respuesta es un comando de shell, dalo en un bloque de código bash. No expliques el comando salvo que te lo pidan."

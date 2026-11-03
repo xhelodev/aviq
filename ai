@@ -1,80 +1,241 @@
 #!/bin/bash
+#
+# ai — quick AI answers from your terminal, powered by coding agent CLIs.
+#
+# Instead of calling an API directly, this script delegates to an installed
+# agent CLI (opencode, claude, pi or codex), which handles its own auth and
+# can inspect the current directory. Suggested commands can be run with Enter.
 
-# Configuration
-CONFIG_FILE="$HOME/Scripts/.config"
+set -u
 
-# Verify configuration file
-if [[ ! -f "$CONFIG_FILE" ]]; then
-    echo "Error: Configuration file not found at $CONFIG_FILE." >&2
-    exit 1
+# ------------------------------------------------------------------ defaults
+
+BACKENDS="opencode claude pi codex"
+MODEL=""
+PROMPT="Responde en pocas líneas, directo y amistoso, en el idioma del usuario. Si la respuesta es un comando de shell, dalo en un bloque de código bash. No expliques el comando salvo que te lo pidan."
+
+# Optional config file overrides the defaults above.
+CONFIG_FILE="${AI_CONFIG:-$HOME/Scripts/.config}"
+[[ -f "$CONFIG_FILE" ]] && source "$CONFIG_FILE"
+
+# Environment variables take precedence over everything.
+BACKENDS="${AI_BACKENDS:-$BACKENDS}"
+MODEL="${AI_MODEL:-$MODEL}"
+PROMPT="${AI_PROMPT:-$PROMPT}"
+
+# ------------------------------------------------------------------- helpers
+
+die() { echo "Error: $*" >&2; exit 1; }
+
+usage() {
+    cat <<'EOF'
+ai — quick AI answers from your terminal
+
+Usage:
+  ai [options] [message...]          ask a question
+  command | ai [message...]          add piped output as context
+
+Options:
+  -b, --backend <name>   force a backend: opencode, claude, pi or codex
+  -m, --model <model>    model for this query (backend-specific format)
+  -l, --list             list available backends and exit
+  -n, --no-exec          never offer to run suggested commands
+  -h, --help             show this help
+  --                     end of options (for prompts starting with -)
+
+If the answer includes shell commands in code blocks, you can run them
+interactively: one command asks for Enter, several show a numbered menu.
+EOF
+    printf '\nBackends in order of preference: %s\n' "$BACKENDS"
+}
+
+# ------------------------------------------------------------------ backends
+
+run_opencode() {
+    local cmd=(opencode run)
+    [[ -n "$MODEL" ]] && cmd+=(--model "$MODEL")
+    cmd+=("$1")
+    "${cmd[@]}"
+}
+
+run_claude() {
+    local cmd=(claude -p --output-format text --append-system-prompt "$PROMPT")
+    [[ -n "$MODEL" ]] && cmd+=(--model "$MODEL")
+    cmd+=(-- "$1")
+    "${cmd[@]}"
+}
+
+run_pi() {
+    local cmd=(pi -p --no-session)
+    [[ -n "$MODEL" ]] && cmd+=(--model "$MODEL")
+    cmd+=("$1")
+    "${cmd[@]}"
+}
+
+run_codex() {
+    local cmd=(codex exec --sandbox read-only --skip-git-repo-check)
+    [[ -n "$MODEL" ]] && cmd+=(--model "$MODEL")
+    cmd+=(-- "$1")
+    "${cmd[@]}"
+}
+
+ask_backend() {
+    local backend="$1" msg="$2"
+    if [[ "$backend" == "claude" ]]; then
+        run_claude "$msg" # claude takes the instruction as a system prompt
+    else
+        run_"$backend" "$PROMPT
+
+$msg" # other backends get it prepended to the message
+    fi
+}
+
+# --------------------------------------------------------------- parse args
+
+FORCE_BACKEND=""
+LIST_ONLY=false
+NO_EXEC=false
+END_OPTS=false
+MSG_ARGS=()
+
+while [[ $# -gt 0 ]]; do
+    if [[ "$END_OPTS" == false && "$1" == -?* ]]; then
+        case "$1" in
+            -b | --backend) [[ $# -ge 2 ]] || die "option $1 requires a value"; FORCE_BACKEND="$2"; shift 2 ;;
+            -m | --model) [[ $# -ge 2 ]] || die "option $1 requires a value"; MODEL="$2"; shift 2 ;;
+            -l | --list) LIST_ONLY=true; shift ;;
+            -n | --no-exec) NO_EXEC=true; shift ;;
+            -h | --help) usage; exit 0 ;;
+            --) END_OPTS=true; shift ;;
+            *) die "unknown option: $1 (see --help)" ;;
+        esac
+    else
+        MSG_ARGS+=("$1")
+        shift
+    fi
+done
+
+if [[ "$LIST_ONLY" == true ]]; then
+    for b in $BACKENDS; do
+        if command -v "$b" >/dev/null 2>&1; then
+            printf '  %-10s %s\n' "$b" "$(command -v "$b")"
+        else
+            printf '  %-10s not installed\n' "$b"
+        fi
+    done
+    exit 0
 fi
 
-# Load configurations
-source "$CONFIG_FILE"
+# --------------------------------------------------------------- the message
 
-if [[ -z "$API_KEY" ]]; then
-    echo "Error: API_KEY variable not defined in configuration file." >&2
-    exit 1
-fi
-
-if [[ -z "$PROMPT" ]]; then
-    echo "Error: PROMPT variable not defined in configuration file." >&2
-    exit 1
-fi
-
-if [[ -z "$API_URL" ]]; then
-    echo "Error: API_URL variable not defined in configuration file." >&2
-    exit 1
-fi
-
-if [[ -z "$MODEL" ]]; then
-    echo "Error: MODEL variable not defined in configuration file." >&2
-    exit 1
-fi
-
-# Capture input from pipe or arguments
+MESSAGE=""
 if ! [[ -t 0 ]]; then
     MESSAGE=$(cat)
 fi
+if [[ ${#MSG_ARGS[@]} -gt 0 ]]; then
+    MESSAGE="${MESSAGE:+$MESSAGE }${MSG_ARGS[*]}"
+fi
 
-# If there are arguments, add them correctly (with space if MESSAGE already has content)
-[[ -n "$1" ]] && MESSAGE="${MESSAGE:+$MESSAGE }$*"
-
-# Escape the message for JSON safely
-MESSAGE=$(jq -R -s '.' <<< "$MESSAGE")
-
-# Validate message
-if [[ -z "$MESSAGE" ]]; then
-    echo "Usage: $0 <message>" >&2
+if [[ -z "${MESSAGE//[[:space:]]/}" ]]; then
+    usage >&2
     exit 1
 fi
 
-# Make API request
-RESPONSE=$(curl -s -X POST "$API_URL" \
-    -H "Authorization: Bearer $API_KEY" \
-    -H "Content-Type: application/json" \
-    -d @- << EOF
-{
-    "model": "$MODEL",
-    "messages": [
-        { "role": "system", "content": "$PROMPT" },
-        { "role": "user", "content": ${MESSAGE} }
-    ]
-}
-EOF
-) || {
-    echo "Error: API connection failed." >&2
-    exit 1
-}
+# ----------------------------------------------------------------- backend
 
-# Extract and display the response
-FINAL_RESPONSE=$(jq -r '.choices[0].message.content' <<< "$RESPONSE")
-
-if [[ -z "$FINAL_RESPONSE" || "$FINAL_RESPONSE" == "null" ]]; then
-    echo "Error: Invalid API response." >&2
-    echo "Complete API response:" >&2
-    echo "$RESPONSE" | jq '.' >&2
-    exit 1
+if [[ -n "$FORCE_BACKEND" ]]; then
+    declare -F "run_$FORCE_BACKEND" >/dev/null 2>&1 || die "unsupported backend: $FORCE_BACKEND (supported: opencode, claude, pi, codex)"
+    command -v "$FORCE_BACKEND" >/dev/null 2>&1 || die "backend '$FORCE_BACKEND' is not installed"
+    CANDIDATES=("$FORCE_BACKEND") # forced: no failover
+else
+    CANDIDATES=()
+    for b in $BACKENDS; do
+        if command -v "$b" >/dev/null 2>&1 && declare -F "run_$b" >/dev/null 2>&1; then
+            CANDIDATES+=("$b")
+        fi
+    done
+    [[ ${#CANDIDATES[@]} -gt 0 ]] || die "no supported AI CLI found in PATH (opencode, claude, pi, codex). Install one and try again."
 fi
 
-echo "$FINAL_RESPONSE"
+# ------------------------------------------------------------------- query
+
+# Backend stderr is captured and only shown if that backend fails, to keep
+# successful runs clean (some CLIs are noisy on stderr).
+ERRFILE=$(mktemp) || die "cannot create temp file."
+trap 'rm -f "$ERRFILE"' EXIT
+
+RESPONSE=""
+for BACKEND in "${CANDIDATES[@]}"; do
+    echo "⚡ asking $BACKEND..." >&2
+    if RESPONSE=$(ask_backend "$BACKEND" "$MESSAGE" 2>"$ERRFILE"); then
+        # Trim surrounding whitespace.
+        RESPONSE="${RESPONSE#"${RESPONSE%%[![:space:]]*}"}"
+        RESPONSE="${RESPONSE%"${RESPONSE##*[![:space:]]}"}"
+        [[ -n "$RESPONSE" ]] && break
+        echo "⚠ empty response from $BACKEND" >&2
+        tail -n 15 "$ERRFILE" >&2
+    else
+        echo "⚠ $BACKEND failed:" >&2
+        tail -n 15 "$ERRFILE" >&2
+    fi
+    RESPONSE=""
+    [[ ${#CANDIDATES[@]} -gt 1 ]] && echo "… trying next backend" >&2
+done
+
+[[ -n "$RESPONSE" ]] || die "all backends failed, see the errors above."
+
+echo "$RESPONSE"
+
+# -------------------------------------------------- extract command blocks
+
+# Fenced blocks tagged bash/sh/shell/zsh (or untagged), separated by \034.
+BLOCKS=$(awk '
+    BEGIN { SEP = sprintf("%c", 28); out = "" }
+    /^```/ {
+        if (inblock) {
+            if (buf != "" && tagok) out = out (out == "" ? "" : SEP) buf
+            inblock = 0; buf = ""
+        } else {
+            inblock = 1
+            tagok = ($0 ~ /^```(bash|sh|shell|zsh)?[[:space:]]*$/)
+        }
+        next
+    }
+    inblock { buf = buf (buf == "" ? "" : "\n") $0 }
+    END { if (inblock && buf != "" && tagok) out = out (out == "" ? "" : SEP) buf; print out }
+' <<<"$RESPONSE")
+
+COMMANDS=()
+[[ -n "$BLOCKS" ]] && mapfile -t -d $'\034' COMMANDS < <(printf '%s' "$BLOCKS")
+
+# ------------------------------------------------------- offer to run them
+
+run_cmd() {
+    echo "\$ $1" >&2
+    bash -c "$1"
+    local rc=$?
+    [[ $rc -ne 0 ]] && echo "(exit $rc)" >&2
+    exit "$rc"
+}
+
+if [[ "$NO_EXEC" == false && ${#COMMANDS[@]} -gt 0 && -t 1 && -r /dev/tty && -w /dev/tty ]]; then
+    n=${#COMMANDS[@]}
+    ans=""
+    if [[ $n -eq 1 ]]; then
+        printf '\n➜ Run it? [Enter=yes, anything else=no] ' >&2
+        IFS= read -r ans </dev/tty || exit 0
+        [[ -z "$ans" ]] && run_cmd "${COMMANDS[0]}"
+    else
+        printf '\nSuggested commands:\n' >&2
+        for ((i = 0; i < n; i++)); do
+            printf '  [%d] %s\n' "$((i + 1))" "${COMMANDS[$i]}" >&2
+        done
+        printf '\nRun which one? [1-%d, Enter=none] ' "$n" >&2
+        IFS= read -r ans </dev/tty || exit 0
+        if [[ "$ans" =~ ^[0-9]+$ ]] && ((10#$ans >= 1 && 10#$ans <= n)); then
+            run_cmd "${COMMANDS[$((10#$ans - 1))]}"
+        fi
+    fi
+fi
+
+exit 0
