@@ -4,6 +4,8 @@ Command-line script for quick AI answers from your terminal, powered by coding a
 
 Ask things like `aviq what's in this directory` or `aviq command to inspect the database`, get a short answer, and run the suggested command by pressing Enter.
 
+![AVIQ demo: asking a question, running the suggested command with Enter, piping a file as context and picking from several suggested commands](docs/demo.gif)
+
 ## 🚀 Installation
 
 ### Quick install (one line)
