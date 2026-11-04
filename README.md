@@ -51,7 +51,7 @@ cp .config.example .config
 
 Available variables:
 ```bash
-BACKENDS="opencode claude pi codex"   # first installed CLI wins
+BACKENDS="pi opencode claude codex"   # first installed CLI wins
 MODEL=""                              # optional, backend-specific format
 PROMPT="answer in a few lines, ..."   # instructions for the model
 ```

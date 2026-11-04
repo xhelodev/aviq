@@ -10,7 +10,7 @@ set -u
 
 # ------------------------------------------------------------------ defaults
 
-BACKENDS="opencode claude pi codex"
+BACKENDS="pi opencode claude codex"
 MODEL=""
 PROMPT="Responde en pocas líneas, directo y amistoso, en el idioma del usuario. Si la respuesta es un comando de shell, dalo en un bloque de código bash. No expliques el comando salvo que te lo pidan."
 
